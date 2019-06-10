@@ -15,11 +15,9 @@
 #define MOD     11
 
 /*Definicao dos tipos de identificadores*/
-#define IDGLOB		1
-#define IDVAR		2
-#define IDFUNC		3
-#define IDPROC		4
-#define IDPROG		5
+#define 	IDPROG		1
+#define 	IDVAR		2
+#define 	IDFUNC		3
 
 /*  Definicao dos tipos de passagem de parametros  */
 #define PARAMVAL	1
@@ -53,7 +51,7 @@ typedef struct celsimb celsimb;
 typedef celsimb *simbolo;
 struct celsimb {
 	char *cadeia;
-	int tid, tvar, tparam, ndims, dims[MAXDIMS+1];
+	int tid, tvar, qparam, ndims, dims[MAXDIMS+1], params[10];
 	char inic, ref, array, parametro;
      listsimb listvardecl, listparam, listfunc; 
 	simbolo prox, escopo;
@@ -64,11 +62,13 @@ struct elemlistsimb {
 };
 /*  Variaveis globais para a tabela de simbolos e analise semantica */
 simbolo tabsimb[NCLASSHASH];
-simbolo simb, escopo, aux;
+simbolo simb, escopo, aux, called, glob;
 listsimb pontfunc, pontvardecl;
 int tipocorrente;
 int tipo_func_corrente;
 int declparam;
+int DeclArgs = 0;
+int QArgs;
 int tab = 0;
 int countmain = 0;
 
@@ -119,11 +119,15 @@ char cadeia[50];
      infoexpressao infoexpr;
 	infovariavel infovar;
      int nsubscr;
+     int nparam;
+     int nargs;
 } 
 %type	<infovar>	        Variable FuncCall
 %type 	<infoexpr> 	Expression  AuxExpr1  AuxExpr2 
-                        AuxExpr3   AuxExpr4   Term   Factor
+                        AuxExpr3   AuxExpr4   Term   Factor Parameter
 %type     <nsubscr>       Subscripts  SubscrList
+%type     <nparam>       Params  ParamList
+%type     <nargs>        Arguments ExprList
 %token <cadeia> ID
 %token <valint> INTCT
 %token <valreal> FLOATCT
@@ -176,7 +180,7 @@ char cadeia[50];
 Prog : {InicTabSimb ();} PROGRAM ID OPBRACE 
        {
           printf ("program %s {\n", $3);
-          escopo = InsereSimb ($3, IDPROG, NAOVAR, NULL);
+          escopo = glob = InsereSimb ($3, IDPROG, NAOVAR, NULL);
           declparam = FALSO; 
           pontvardecl = escopo->listvardecl;
 	     pontfunc = escopo->listfunc;
@@ -236,23 +240,33 @@ Functions : FUNCTIONS COLON {tabular (); printf ("\nfunctions:\n");} FuncList {p
 FuncList : Function | FuncList Function
          ;
 Function : Header OPBRACE {tabular (); printf ("\{\n\n"); tab++;} 
-         LocDecls Stats CLBRACE {tab--; tabular (); printf ("\n}\n");}
+         LocDecls Stats CLBRACE {tab--; tabular (); printf ("\n}\n");escopo=escopo->escopo;}
          ;
-Header : MAIN {printf ("main"); countmain++; if(countmain > 1) NaoEsperado ("Main"); escopo = InsereSimb ("##main", IDFUNC, NAOVAR, escopo);} 
+Header : MAIN {printf ("main"); countmain++; if(countmain > 1) NaoEsperado ("Main"); escopo = InsereSimb ("Main", IDFUNC, NAOVAR, escopo);} 
        | Type ID {printf ("%s", $2); 
                   aux = ProcuraSimb($2);
                   if((aux != NULL && aux->escopo->escopo != NULL)||aux == NULL)
                       escopo = InsereSimb ($2, IDFUNC, tipocorrente, escopo);
                   else NaoEsperado("funcao com nome de variavel global");
                   tipo_func_corrente = tipocorrente;}  
-         OPPAR {printf(" \(");} Params CLPAR {printf(")");}
+         OPPAR {printf(" \(");} Params CLPAR {printf(")");escopo->qparam = $6;}
        ;
-Params :
-       | ParamList
+Params : {$$ = 0; }
+       | ParamList {$$ = $1;}
        ;
-ParamList : Parameter | ParamList COMMA {printf(",");} Parameter
+ParamList : Parameter { if ($1.tipo == VAZIO)
+                            Incompatibilidade ("Tipo VOID inadequado para parametro");
+                        $$ = 1;
+                        escopo->params[1] = $1.tipo;
+                      } 
+          | ParamList COMMA {printf(",");} 
+          Parameter { if ($4.tipo == VAZIO)
+                        Incompatibilidade ("Tipo VOID inadequado para parametro");
+                      $$ = $1 + 1;
+                      escopo->params[$$] = $4.tipo;
+                    } 
           ;
-Parameter : Type ID {printf ("%s", $2); InsereSimb ($2, IDVAR, tipocorrente, escopo);}
+Parameter : Type ID {printf ("%s", $2); InsereSimb ($2, IDVAR, tipocorrente, escopo)->inic = VERDADE; $$.tipo = tipocorrente;}
           ;
 LocDecls : 
          | LOCAL COLON {printf ("local:\n");} DeclList
@@ -349,14 +363,19 @@ CallStat : CALL {printf("\n");tabular(); printf("call ");}
          ;
 FuncCall : ID {printf ("%s ", $1);
                 simb = ProcuraSimb ($1);
-                if (simb == NULL)   NaoDeclarado ($1);
+                if (simb == NULL||(simb->tid == IDVAR && (simb->escopo!=escopo && simb->escopo!=glob)))   NaoDeclarado ($1);
                 else if (simb->tid != IDFUNC) TipoInadequado ($1);
                 $<simb>$ = simb;} 
-               OPPAR {printf("\(");} 
-               Arguments CLPAR {printf(")");} {$$.simb = $<simb>2;}
+               OPPAR {printf("\(");} {if(DeclArgs == 0) called = ProcuraSimb($1);DeclArgs++;}
+               Arguments CLPAR {printf(")");} {$$.simb = $<simb>2;
+               if(called->qparam != $6 && !strcmp(called->cadeia,$1)) 
+                  Incompatibilidade("Numero diferente entre argumentos e parametros");
+               if(called->cadeia == escopo->cadeia) 
+                  Incompatibilidade("A linguagem nao admite recursividade");
+               DeclArgs--;}
          ;
-Arguments : 
-          | ExprList
+Arguments : {$$ = 0;}
+          | ExprList {$$ = $1;}
           ;
 ReturnStat : RETURN {printf("\n");tabular();printf("return");} 
              SCOLON {printf(";\n"); if(tipo_func_corrente != VAZIO) Esperado("expressao");} 
@@ -382,7 +401,21 @@ AssignStat : {printf("\n");tabular();} Variable {if  ($2.simb != NULL) $2.simb->
                            Incompatibilidade ("Lado direito de comando de atribuicao improprio");
            }
            ;
-ExprList : Expression | ExprList COMMA {printf(",");} Expression
+ExprList : Expression { if (((called->params[1] == INTEIRO || called->params[1] == CARACTERE) &&
+                           ($1.tipo == REAL || $1.tipo == LOGICO)) ||
+                           (called->params[1] == REAL && $1.tipo == LOGICO) ||
+                           (called->params[1] == LOGICO && $1.tipo != LOGICO))
+                            Incompatibilidade ("Tipo inadequado para argumento");
+                        $$ = 1;
+                      }
+          | ExprList COMMA {printf(",");} Expression { $$ = $1 + 1;
+                      if (((called->params[$$] == INTEIRO || called->params[$$] == CARACTERE) &&
+                           ($4.tipo == REAL || $4.tipo == LOGICO)) ||
+                           (called->params[$$] == REAL && $4.tipo == LOGICO) ||
+                           (called->params[$$] == LOGICO && $4.tipo != LOGICO))
+                            Incompatibilidade ("Tipo inadequado para argumento");
+                       $$ = $1 + 1;
+                    } 
          ;
 Expression : AuxExpr1
            | Expression OR {printf (" || ");} 
@@ -481,11 +514,12 @@ Factor : Variable { if  ($1.simb != NULL)  {
                 else $$.tipo = INTEIRO;
          }
        | OPPAR {printf("\(");} Expression CLPAR {printf (")");$$ = $3;}
-       | FuncCall {if($1.simb->tvar == VAZIO) Incompatibilidade("Funcao eh do tipo VOID");}
+       | FuncCall {if($1.simb->tvar == VAZIO) Incompatibilidade("Funcao eh do tipo VOID");
+                   if(DeclArgs != 0) Incompatibilidade("Funcao nao eh argumento de chamada");}
        ;
 Variable : ID { printf ("%s ", $1);
                 simb = ProcuraSimb ($1);
-                if (simb == NULL)   NaoDeclarado ($1);
+                if (simb == NULL||(simb->tid == IDVAR && (simb->escopo!=escopo && simb->escopo!=glob)))   NaoDeclarado ($1);
                 else if (simb->tid != IDVAR) TipoInadequado ($1);
                 $<simb>$ = simb;} Subscripts {
                         $$.simb = $<simb>2;
@@ -528,10 +562,10 @@ void InicTabSimb () {
  */
 simbolo ProcuraSimb (char *cadeia) {
 	simbolo s; int i;
+     simbolo ajuda, ajuda2;
 	i = hash (cadeia);
-	for (s = tabsimb[i]; (s!=NULL) && strcmp(cadeia, s->cadeia);
-		s = s->prox);
-	return s;
+	for (s = tabsimb[i]; (s!=NULL) && strcmp(cadeia, s->cadeia); s = s->prox);
+     return s;
 }
 /*
 	InsereSimb (cadeia, tid, tvar): Insere cadeia na tabela de
@@ -547,6 +581,7 @@ simbolo InsereSimb (char *cadeia, int tid, int tvar, simbolo escopo) {
 	s->tid = tid;		s->tvar = tvar;
 	s->inic = FALSO;	s->ref = FALSO;
 	s->prox = aux; s->escopo = escopo;	
+     s->qparam = 0;
      return s;
 }
 /*
@@ -577,7 +612,9 @@ void ImprimeTabSimb () {
                             printf ("  %d", s->dims[j]);
 					}
 				}
-				printf(")\n");
+                    if(s->escopo != NULL)
+				printf(", %s)\n",s->escopo->cadeia);
+                    else printf(", Global)\n");
 			}
 		}
 }
