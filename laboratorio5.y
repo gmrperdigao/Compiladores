@@ -118,7 +118,6 @@ simbolo simb, escopo, aux, called, glob;
 listsimb pontfunc, pontvardecl;
 int tipocorrente;
 int tipo_func_corrente;
-int declparam;
 int DeclArgs = 0;
 int QArgs;
 int tab = 0;
@@ -266,9 +265,6 @@ Prog : {InicTabSimb ();InicCodIntermed (); numtemp = 0;} PROGRAM ID OPBRACE
        {
           printf ("program %s {\n", $3);
           escopo = glob = simb =InsereSimb ($3, IDPROG, NAOVAR, NULL);
-          declparam = FALSO; 
-          pontvardecl = escopo->listvardecl;
-	     pontfunc = escopo->listfunc;
           InicCodIntermMod (simb);
           opnd1.tipo = MODOPND;
           opnd1.atr.modulo = modcorrente;
@@ -332,13 +328,26 @@ FuncList : Function | FuncList Function
 Function : Header OPBRACE {tabular (); printf ("\{\n\n"); tab++;} 
          LocDecls Stats CLBRACE {tab--; tabular (); printf ("\n}\n");escopo=escopo->escopo;}
          ;
-Header : MAIN {printf ("main"); countmain++; if(countmain > 1) NaoEsperado ("Main"); escopo = InsereSimb ("Main", IDFUNC, NAOVAR, escopo);} 
+Header : MAIN {printf ("main"); countmain++; if(countmain > 1) NaoEsperado ("Main"); 
+               escopo = InsereSimb ("Main", IDFUNC, NAOVAR, escopo);
+               opnd1.tipo = MODOPND;
+               InicCodIntermMod (escopo);
+               opnd1.atr.modulo = modcorrente;
+               opnd2.tipo = INTOPND;
+               opnd2.atr.valint = 0;
+               GeraQuadrupla (OPCALL, opnd1, opnd2, opndidle);} 
        | Type ID {printf ("%s", $2); 
                   aux = ProcuraSimb($2);
                   if((aux != NULL && aux->escopo->escopo != NULL)||aux == NULL)
                       escopo = InsereSimb ($2, IDFUNC, tipocorrente, escopo);
                   else NaoEsperado("funcao com nome de variavel global");
-                  tipo_func_corrente = tipocorrente;}  
+                  tipo_func_corrente = tipocorrente;
+                  opnd1.tipo = MODOPND;
+                  InicCodIntermMod (escopo);
+                  opnd1.atr.modulo = modcorrente;
+                  opnd2.tipo = tipocorrente;
+                  opnd2.atr.valint = 0;
+                  GeraQuadrupla (OPCALL, opnd1, opndidle, opndidle); }  
          OPPAR {printf(" \(");} Params CLPAR {printf(")");escopo->qparam = $6;}
        ;
 Params : {$$ = 0; }
@@ -526,7 +535,7 @@ FuncCall : ID {printf ("%s ", $1);
                if(called->cadeia == escopo->cadeia) 
                   Incompatibilidade("A linguagem nao admite recursividade");
                DeclArgs--;
-               opnd1.tipo = FUNCOPND;  opnd1.atr.func = $$.simb->escopo;
+               opnd1.tipo = MODOPND;  opnd1.atr.func = $$.simb->escopo;
           	opnd2.tipo = INTOPND; opnd2.atr.valint = $6;
 	          if ($$.simb->tvar == NAOVAR) result = opndidle;
 	          else { result.tipo = VAROPND;
@@ -952,7 +961,6 @@ void ImprimeQuadruplas () {
 				case CADOPND: printf (", %s", q->opnd1.atr.valcad); break;
 				case ROTOPND: printf (", %d", q->opnd1.atr.rotulo->num); break;
 				case MODOPND: printf(", %s", q->opnd1.atr.modulo->modname->cadeia); break;
-                    case FUNCOPND: printf (",VER AQUI"); break;
 			}
 			printf (")");
 			printf (", (%s", nometipoopndquad[q->opnd2.tipo]);
@@ -966,7 +974,6 @@ void ImprimeQuadruplas () {
 				case CADOPND: printf (", %s", q->opnd2.atr.valcad); break;
 				case ROTOPND: printf (", %d", q->opnd2.atr.rotulo->num); break;
 				case MODOPND: printf(", %s", q->opnd2.atr.modulo->modname->cadeia); break;
-                    case FUNCOPND: printf (",VER AQUI"); break;
 			}
 			printf (")");
 			printf (", (%s", nometipoopndquad[q->result.tipo]);
@@ -980,7 +987,6 @@ void ImprimeQuadruplas () {
 				case CADOPND: printf (", %s", q->result.atr.valcad); break;
 				case ROTOPND: printf (", %d", q->result.atr.rotulo->num); break;
 				case MODOPND: printf(", %s", q->result.atr.modulo->modname->cadeia); break;
-                    case FUNCOPND: printf (",VER AQUI"); break;
 			}
 			printf (")");
 		}
