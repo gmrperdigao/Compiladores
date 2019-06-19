@@ -58,6 +58,7 @@
 #define   OPJT          24
 #define   OPCALL        25
 #define   OPRETURN      26
+#define   OPEXIT        27
 
 /* Definicao de constantes para os tipos de operandos de quadruplas */
 #define	IDLEOPND		0
@@ -85,10 +86,10 @@ char *nometipid[3] = {" ", "IDPROG", "IDVAR"};
 char *nometipvar[6] = {"NAOVAR","INTEIRO", "LOGICO", "REAL", "CARACTERE","VAZIO"};
 
 /* Strings para operadores de quadruplas */
-char *nomeoperquad[27] = {"",
+char *nomeoperquad[28] = {"",
 	"OR", "AND", "LT", "LE", "GT", "GE", "EQ", "NE", "MAIS",
 	"MENOS", "MULT", "DIV", "RESTO", "MENUN", "NOT", "ATRIB",
-	"OPENMOD", "NOP", "JUMP", "JF", "PARAM", "READ", "WRITE", "JT","CALL","RETURN"
+	"OPENMOD", "NOP", "JUMP", "JF", "PARAM", "READ", "WRITE", "JT","CALL","RETURN","EXIT"
 };
 
 /*	Strings para tipos de operandos de quadruplas */
@@ -146,8 +147,9 @@ typedef struct celmodhead celmodhead;
 typedef celmodhead *modhead;
 
 union atribopnd {
-	simbolo simb, func; int valint; float valfloat;
+	simbolo simb; int valint; float valfloat;
 	char valchar; char vallogic; char *valcad;
+     char *func;
      quadrupla rotulo; modhead modulo;
 };
 struct operando {
@@ -269,6 +271,13 @@ Prog : {InicTabSimb ();InicCodIntermed (); numtemp = 0;} PROGRAM ID OPBRACE
           opnd1.tipo = MODOPND;
           opnd1.atr.modulo = modcorrente;
           GeraQuadrupla (OPENMOD, opnd1, opndidle, opndidle);
+          opnd1.tipo = FUNCOPND;
+          opnd1.atr.func = malloc (strlen("Main") + 1);
+          strcpy(opnd1.atr.func, "Main");
+          opnd2.tipo = INTOPND;
+          opnd2.atr.valint = 0;
+          GeraQuadrupla (OPCALL, opnd1, opnd2, opndidle);
+          GeraQuadrupla (OPEXIT, opndidle, opndidle, opndidle);
        }
        GlobDecls Functions CLBRACE {
           printf ("}\n");
@@ -333,9 +342,8 @@ Header : MAIN {printf ("main"); countmain++; if(countmain > 1) NaoEsperado ("Mai
                opnd1.tipo = MODOPND;
                InicCodIntermMod (escopo);
                opnd1.atr.modulo = modcorrente;
-               opnd2.tipo = INTOPND;
-               opnd2.atr.valint = 0;
-               GeraQuadrupla (OPCALL, opnd1, opnd2, opndidle);} 
+               GeraQuadrupla (OPENMOD, opnd1, opndidle, opndidle);
+               } 
        | Type ID {printf ("%s", $2); 
                   aux = ProcuraSimb($2);
                   if((aux != NULL && aux->escopo->escopo != NULL)||aux == NULL)
@@ -345,9 +353,7 @@ Header : MAIN {printf ("main"); countmain++; if(countmain > 1) NaoEsperado ("Mai
                   opnd1.tipo = MODOPND;
                   InicCodIntermMod (escopo);
                   opnd1.atr.modulo = modcorrente;
-                  opnd2.tipo = tipocorrente;
-                  opnd2.atr.valint = 0;
-                  GeraQuadrupla (OPCALL, opnd1, opndidle, opndidle); }  
+                  GeraQuadrupla (OPENMOD, opnd1, opndidle, opndidle); }  
          OPPAR {printf(" \(");} Params CLPAR {printf(")");escopo->qparam = $6;}
        ;
 Params : {$$ = 0; }
@@ -365,7 +371,7 @@ ParamList : Parameter { if ($1.tipo == VAZIO)
                       escopo->params[$$] = $4.tipo;
                     } 
           ;
-Parameter : Type ID {printf ("%s", $2); InsereSimb ($2, IDVAR, tipocorrente, escopo)->inic = VERDADE; $$.tipo = tipocorrente;}
+Parameter : Type ID {printf ("%s", $2); InsereSimb ($2, IDVAR, tipocorrente, escopo)->inic = VERDADE; ProcuraSimb($2)->ndims = 0; $$.tipo = tipocorrente;}
           ;
 LocDecls : 
          | LOCAL COLON {printf ("local:\n");} DeclList
@@ -535,7 +541,9 @@ FuncCall : ID {printf ("%s ", $1);
                if(called->cadeia == escopo->cadeia) 
                   Incompatibilidade("A linguagem nao admite recursividade");
                DeclArgs--;
-               opnd1.tipo = MODOPND;  opnd1.atr.func = $$.simb->escopo;
+               opnd1.tipo = FUNCOPND; 
+               opnd1.atr.func = malloc (strlen($1) + 1);
+               strcpy(opnd1.atr.func, $1);
           	opnd2.tipo = INTOPND; opnd2.atr.valint = $6;
 	          if ($$.simb->tvar == NAOVAR) result = opndidle;
 	          else { result.tipo = VAROPND;
@@ -725,7 +733,7 @@ Factor : Variable { if  ($1.simb != NULL)  {
                   }
        | INTCT {printf ("%d", $1); $$.tipo = INTEIRO;$$.opnd.tipo = INTOPND; $$.opnd.atr.valint = $1;} 
        | FLOATCT  {printf ("%f", $1); $$.tipo = REAL;$$.opnd.tipo = REALOPND; $$.opnd.atr.valfloat = $1;}
-       | CHARCT {printf ("%s", $1); $$.tipo = CARACTERE;$$.opnd.tipo = CHAROPND;$$.opnd.atr.valchar = $1;}
+       | CHARCT {printf ("%s", $1); $$.tipo = CARACTERE;$$.opnd.tipo = CHAROPND;$$.opnd.atr.valchar = $1[1];}
        | TRUE  {printf ("true"); $$.tipo = LOGICO;$$.opnd.tipo = LOGICOPND;$$.opnd.atr.vallogic = 1;}
        | FALSE {printf ("false"); $$.tipo = LOGICO;$$.opnd.tipo = LOGICOPND;$$.opnd.atr.vallogic = 0;}
        | NEG {printf ("~");} Factor {
@@ -961,6 +969,7 @@ void ImprimeQuadruplas () {
 				case CADOPND: printf (", %s", q->opnd1.atr.valcad); break;
 				case ROTOPND: printf (", %d", q->opnd1.atr.rotulo->num); break;
 				case MODOPND: printf(", %s", q->opnd1.atr.modulo->modname->cadeia); break;
+                    case FUNCOPND: printf (", %s", q->opnd1.atr.func); break;
 			}
 			printf (")");
 			printf (", (%s", nometipoopndquad[q->opnd2.tipo]);
@@ -974,6 +983,7 @@ void ImprimeQuadruplas () {
 				case CADOPND: printf (", %s", q->opnd2.atr.valcad); break;
 				case ROTOPND: printf (", %d", q->opnd2.atr.rotulo->num); break;
 				case MODOPND: printf(", %s", q->opnd2.atr.modulo->modname->cadeia); break;
+                    case FUNCOPND: printf (", %s", q->opnd2.atr.func); break;
 			}
 			printf (")");
 			printf (", (%s", nometipoopndquad[q->result.tipo]);
@@ -987,6 +997,7 @@ void ImprimeQuadruplas () {
 				case CADOPND: printf (", %s", q->result.atr.valcad); break;
 				case ROTOPND: printf (", %d", q->result.atr.rotulo->num); break;
 				case MODOPND: printf(", %s", q->result.atr.modulo->modname->cadeia); break;
+                    case FUNCOPND: printf (", %s", q->result.atr.func); break;
 			}
 			printf (")");
 		}
