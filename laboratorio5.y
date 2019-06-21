@@ -177,6 +177,7 @@ modhead codintermed, modcorrente;
 int oper, numquadcorrente;
 operando opnd1, opnd2, result, opndaux;
 int numtemp, i;
+int sinal = FALSO;
 const operando opndidle = {IDLEOPND, 0};
 quadrupla pontparam, pontread,paux;
 
@@ -465,6 +466,7 @@ ForStat : FOR {printf("\n");tabular(); printf("for");} OPPAR {printf("\(");}
         Expression {
                     if ($9.tipo != INTEIRO && $9.tipo != CARACTERE)
                         Incompatibilidade ("1 Expressao nao inteira ou caractere em comando for");
+                    GeraQuadrupla (OPATRIB, $9.opnd, opndidle, $5.opnd);
                    }
         SCOLON {printf(";");
                 $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);}
@@ -481,6 +483,7 @@ ForStat : FOR {printf("\n");tabular(); printf("for");} OPPAR {printf("\(");}
         Expression {
                     if ($21.tipo != INTEIRO && $21.tipo != CARACTERE)
                         Incompatibilidade ("3 Expressao nao inteira ou caractere em comando for");
+                    GeraQuadrupla (OPATRIB, $21.opnd, opndidle, $17.opnd);
                    }
         CLPAR {printf(")");tab++;$<quad>$ = quadcorrente;} {$<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle); } 
         Statement   {tab--;
@@ -498,14 +501,23 @@ ReadStat : READ {printf("\n");tabular(); printf("read");} OPPAR {printf("\(");} 
            {printf(")");
             opnd1.tipo = INTOPND;
             opnd1.atr.valint = $5;
-            if($5 != 0)
+            if($5 != 0 && sinal == FALSO)
             GeraQuadrupla (OPREAD, opnd1, opndidle, opndidle);} SCOLON {printf(";");}
          ;
 ReadList : Variable {
                if  ($1.simb != NULL) 
                  $1.simb->inic = $1.simb->ref = VERDADE;
                $$ = 1;
-               GeraQuadrupla (PARAM, $1.opnd, opndidle, opndidle);
+               if($1.simb->ndims != 0){
+                    sinal = VERDADE;
+                    opnd2.atr.simb = NovaTemp($1.simb->tvar);
+                    opnd2.tipo = VAROPND;
+                    opnd1.tipo = INTOPND;
+                    opnd1.atr.valint = 1;
+                    GeraQuadrupla (PARAM, opnd2, opndidle, opndidle);
+                    GeraQuadrupla (OPREAD, opnd1, opndidle, opndidle);
+                    GeraQuadrupla (OPATRIBPONT, opnd2, opndidle, $1.opnd);
+               } else{GeraQuadrupla (PARAM, $1.opnd, opndidle, opndidle); sinal = FALSO;}
            }
            | ReadList COMMA {printf(",");} Variable {
                     if  ($4.simb != NULL) 
