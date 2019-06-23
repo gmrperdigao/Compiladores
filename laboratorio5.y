@@ -126,7 +126,7 @@ int tipocorrente;
 int tipo_func_corrente;
 int DeclArgs = 0;
 int QArgs;
-int LadoDireito = FALSO;
+int IsExpr = FALSO;
 int tab = 0;
 int countmain = 0;
 
@@ -406,7 +406,7 @@ CompStat : OPBRACE
          StatList CLBRACE
          {printf("\n");tab--;tabular (); tab++;printf ("}");}
          ;
-IfStat : IF OPPAR {printf("\n");tabular(); printf("if \(");} Expression {
+IfStat : IF OPPAR {printf("\n");tabular(); printf("if \("); IsExpr = VERDADE;} Expression { IsExpr = FALSO;
                     if ($4.tipo != LOGICO)
                         Incompatibilidade ("Expressao nao logica em comando if");
                     opndaux.tipo = ROTOPND;
@@ -430,16 +430,16 @@ ElseStat :
                  $<quad>$ = GeraQuadrupla (OPJUMP, opndidle, opndidle, opndaux);} 
            StatElse {tab--; $<quad>2->result.atr.rotulo = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);}
          | ELSE {printf("\n"); tabular();printf("else"); opndaux.tipo = ROTOPND;
-                 $<quad>$ = GeraQuadrupla (OPJUMP, opndidle, opndidle, opndaux);} IF OPPAR {printf(" if \(");} 
-         Expression {
+                 $<quad>$ = GeraQuadrupla (OPJUMP, opndidle, opndidle, opndaux);} IF OPPAR {printf(" if \(");IsExpr = VERDADE;} 
+         Expression {IsExpr = FALSO;
                     if ($6.tipo != LOGICO)
                         Incompatibilidade ("Expressao nao logica em comando if");
                     }
          CLPAR {printf(")");tab++;}
         Statement {tab--; $<quad>2->result.atr.rotulo = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);} ElseStat 
          ;
-WhileStat : WHILE OPPAR {printf("\n");tabular(); printf("while \("); $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);} 
-            Expression {
+WhileStat : WHILE OPPAR {printf("\n");tabular(); printf("while \("); $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);IsExpr = VERDADE;} 
+            Expression {IsExpr = FALSO;
                if ($4.tipo != LOGICO)
                     Incompatibilidade ("Expressao nao logica em comando while");
                opndaux.tipo = ROTOPND;
@@ -450,8 +450,8 @@ WhileStat : WHILE OPPAR {printf("\n");tabular(); printf("while \("); $<quad>$ = 
                         GeraQuadrupla (OPJUMP, opndidle, opndidle, opndaux);
                         $<quad>5->result.atr.rotulo = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);}
           ;
-DoStat : DO {printf("\n");tabular(); printf("do"); $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);} Statement WHILE OPPAR {printf("while \(");} 
-          Expression {
+DoStat : DO {printf("\n");tabular(); printf("do"); $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);} Statement WHILE OPPAR {printf("while \(");IsExpr = VERDADE;} 
+          Expression { IsExpr = FALSO;
                if ($7.tipo != LOGICO)
                     Incompatibilidade ("Expressao nao logica em comando do-while");
                     opndaux.tipo = ROTOPND;
@@ -462,15 +462,15 @@ DoStat : DO {printf("\n");tabular(); printf("do"); $<quad>$ = GeraQuadrupla (NOP
        ;
 ForStat : FOR {printf("\n");tabular(); printf("for");} OPPAR {printf("\(");} 
         Variable {if  ($5.simb != NULL) $5.simb->inic = $5.simb->ref = VERDADE;} 
-        ASSIGN {printf(" <- ");} 
-        Expression {
+        ASSIGN {printf(" <- ");IsExpr = VERDADE;} 
+        Expression {IsExpr = FALSO;
                     if ($9.tipo != INTEIRO && $9.tipo != CARACTERE)
                         Incompatibilidade ("1 Expressao nao inteira ou caractere em comando for");
                     GeraQuadrupla (OPATRIB, $9.opnd, opndidle, $5.opnd);
                    }
         SCOLON {printf(";");
-                $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);}
-        Expression {
+                $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);IsExpr = VERDADE;}
+        Expression {IsExpr = FALSO;
                if ($13.tipo != LOGICO)
                     Incompatibilidade ("Expressao nao logica em comando for");
                opndaux.tipo = ROTOPND;
@@ -479,8 +479,8 @@ ForStat : FOR {printf("\n");tabular(); printf("for");} OPPAR {printf("\(");}
         SCOLON {printf(";");
                $<quad>$ = GeraQuadrupla (NOP, opndidle, opndidle, opndidle);} 
         Variable {if  ($5.simb != $17.simb) Incompatibilidade ("Variavel de atualizacao do cabecalho do comando for diferente da inicializacao");}
-        ASSIGN {printf(" <- ");} 
-        Expression {
+        ASSIGN {printf(" <- ");IsExpr = VERDADE;} 
+        Expression {IsExpr = FALSO;
                     if ($21.tipo != INTEIRO && $21.tipo != CARACTERE)
                         Incompatibilidade ("3 Expressao nao inteira ou caractere em comando for");
                     GeraQuadrupla (OPATRIB, $21.opnd, opndidle, $17.opnd);
@@ -554,19 +554,21 @@ WriteStat : WRITE {printf("\n");tabular();printf("write");} OPPAR {printf("\(");
            opnd1.atr.valint = $5;
            GeraQuadrupla (OPWRITE, opnd1, opndidle, opndidle);} SCOLON {printf(";");}
           ;
-WriteList : WriteElem  {
+WriteList : {IsExpr = VERDADE;} WriteElem  {
                         $$ = 1;
-                        GeraQuadrupla (PARAM, $1.opnd, opndidle, opndidle);
+                        GeraQuadrupla (PARAM, $2.opnd, opndidle, opndidle);
+                        IsExpr = FALSO;
                       } 
-            | WriteList COMMA {printf(",");} WriteElem {
+            | WriteList COMMA {printf(",");IsExpr = VERDADE;} WriteElem {
                         $$ = $1 + 1;
                         GeraQuadrupla (PARAM, $4.opnd, opndidle, opndidle);
+                        IsExpr = FALSO;
                     }
           ;
 WriteElem : STRING {printf("%s", $1);$$.opnd.tipo = CADOPND;
                         $$.opnd.atr.valcad = malloc (strlen($1) + 1);
                         strcpy ($$.opnd.atr.valcad, $1);} 
-           | Expression
+           | Expression  
           ;
 CallStat : CALL {printf("\n");tabular(); printf("call ");} 
            FuncCall {if($3.simb->tvar != VAZIO) Incompatibilidade("Funcao nao eh do tipo VOID");} SCOLON {printf(";");}
@@ -601,8 +603,8 @@ ReturnStat : RETURN {printf("\n");tabular();printf("return");}
              SCOLON {printf(";\n"); if(tipo_func_corrente != VAZIO) Esperado("expressao");
                     GeraQuadrupla(OPRETURN, opndidle, opndidle, opndidle);
                     } 
-           | RETURN {printf("\n");tabular();printf("return ");} 
-           Expression {if(tipo_func_corrente == VAZIO ) 
+           | RETURN {printf("\n");tabular();printf("return ");IsExpr = VERDADE;} 
+           Expression {IsExpr = FALSO; if(tipo_func_corrente == VAZIO ) 
                          NaoEsperado("expressao");
                        else if(((tipo_func_corrente == INTEIRO || tipo_func_corrente == CARACTERE) &&
                            ($3.tipo == REAL || $3.tipo == LOGICO)) ||
@@ -613,7 +615,7 @@ ReturnStat : RETURN {printf("\n");tabular();printf("return");}
            SCOLON {printf(";\n");}
            ;
 AssignStat : {printf("\n");tabular();} Variable {if  ($2.simb != NULL) $2.simb->inic = $2.simb->ref = VERDADE;}
-           ASSIGN {printf (" <- "); LadoDireito = VERDADE;}
+           ASSIGN {printf (" <- "); IsExpr = VERDADE;}
            Expression SCOLON {
                    printf(";");
                    if ($2.simb != NULL)
@@ -624,18 +626,19 @@ AssignStat : {printf("\n");tabular();} Variable {if  ($2.simb != NULL) $2.simb->
                            Incompatibilidade ("Lado direito de comando de atribuicao improprio");
                          if($2.simb->ndims == 0) GeraQuadrupla (OPATRIB, $6.opnd, opndidle, $2.opnd);
                          else GeraQuadrupla (OPATRIBPONT, $6.opnd, opndidle, $2.opnd);
-                         LadoDireito = FALSO;
+                         IsExpr = FALSO;
            }
            ;
-ExprList : Expression { if (((called->params[1] == INTEIRO || called->params[1] == CARACTERE) &&
-                           ($1.tipo == REAL || $1.tipo == LOGICO)) ||
-                           (called->params[1] == REAL && $1.tipo == LOGICO) ||
-                           (called->params[1] == LOGICO && $1.tipo != LOGICO))
+ExprList : {IsExpr = VERDADE;} Expression { if (((called->params[1] == INTEIRO || called->params[1] == CARACTERE) &&
+                           ($2.tipo == REAL || $2.tipo == LOGICO)) ||
+                           (called->params[1] == REAL && $2.tipo == LOGICO) ||
+                           (called->params[1] == LOGICO && $2.tipo != LOGICO))
                             Incompatibilidade ("Tipo inadequado para argumento");
                         $$ = 1;
-                        GeraQuadrupla (PARAM, $1.opnd, opndidle, opndidle);
+                        GeraQuadrupla (PARAM, $2.opnd, opndidle, opndidle);
+                        IsExpr = FALSO;
                       }
-          | ExprList COMMA {printf(",");} Expression { $$ = $1 + 1;
+          | ExprList COMMA {printf(",");IsExpr = VERDADE;} Expression { $$ = $1 + 1; {IsExpr = FALSO;}
                       if (((called->params[$$] == INTEIRO || called->params[$$] == CARACTERE) &&
                            ($4.tipo == REAL || $4.tipo == LOGICO)) ||
                            (called->params[$$] == REAL && $4.tipo == LOGICO) ||
@@ -789,7 +792,7 @@ Factor : Variable { if  ($1.simb != NULL)  {
                 $$.opnd.atr.simb = NovaTemp ($$.tipo);
                 GeraQuadrupla  (OPMENUN, $3.opnd, opndidle, $$.opnd);
          }
-       | OPPAR {printf("\(");} Expression CLPAR {printf (")");$$.tipo = $3.tipo;$$.opnd = $3.opnd;}
+       | OPPAR {printf("\(");IsExpr = VERDADE;} Expression CLPAR {IsExpr = FALSO;printf (")");$$.tipo = $3.tipo;$$.opnd = $3.opnd;}
        | FuncCall {if($1.simb->tvar == VAZIO) Incompatibilidade("Funcao eh do tipo VOID");
                    if(DeclArgs != 0) Incompatibilidade("Funcao nao eh argumento de chamada");
                    if ($1.simb != NULL) {
@@ -820,7 +823,7 @@ Variable : ID { printf ("%s ", $1);
                                   opnd2.atr.valint = $3;
                                   $$.opnd.atr.simb = NovaTemp($$.simb->tvar);
                                   GeraQuadrupla (OPINDEX, opnd1, opnd2, $$.opnd);
-                                  if(LadoDireito){
+                                  if(IsExpr){
                                        opnd1 = $$.opnd;
                                        $$.opnd.atr.simb = NovaTemp($$.simb->tvar);
                                        GeraQuadrupla (OPCONTAPONT, opnd1, opndidle, $$.opnd);
